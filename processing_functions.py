@@ -1,6 +1,12 @@
 from scipy.signal import butter, lfilter, cheby1
 import numpy as np
 
+def get_efield(filename):
+    data = np.genfromtxt(filename, dtype = "float", delimiter = ",", skip_header = 1)
+    ts = np.array(data[:,0])
+    efield = np.array(data[:,1])
+    return ts, efield
+
 def butter_bandpass(lowcut, highcut, fs, order=2):
     nyq = 0.5 * fs
     low = lowcut / nyq
