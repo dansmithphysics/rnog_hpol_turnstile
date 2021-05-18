@@ -1,5 +1,6 @@
-from scipy.signal import butter, lfilter, cheby1
+import scipy.interpolate
 import numpy as np
+from scipy.signal import butter, lfilter, cheby1
 
 def get_efield(filename):
     data = np.genfromtxt(filename, dtype = "float", delimiter = ",", skip_header = 1)
@@ -26,4 +27,9 @@ def phase_shift(efield, phase):
     efield_fft_ang += phase
     efield_fft = efield_fft_mag * (np.cos(efield_fft_ang) + 1j * np.sin(efield_fft_ang))
     efield = np.fft.irfft(efield_fft)
+    return efield
+
+def time_delay(ts, efield, delay):
+    f_efield = scipy.interpolate.interp1d(ts, efield, kind = "cubic", bounds_error = False, fill_value = "extrapolate")
+    efield = f_efield(np.array(ts) + delay)
     return efield
