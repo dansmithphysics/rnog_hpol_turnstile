@@ -162,7 +162,7 @@ def plot_gain(file_name, n):
         #plt.plot(freqs, 10.0 * np.log10(gain_the), color="purple", alpha=(azimuth_angle + 10.0) / 100.0)
         #plt.plot(freqs, 10.0 * np.log10(gain_phi), color="blue", alpha=(azimuth_angle + 10.0) / 100.0, label=(azimuth_angle))
 
-    plt.title("In-Ice Realized Gain of HPol Prototype: Two Fat Dipoles on Sides")
+    plt.title("In-Ice Realized Gain at Boresight / $90^\circ$ Zenith of HPol Prototype: \n Two Fat Dipoles on Sides, Displaced by 25 cm and by $90^\circ$")
     plt.legend(loc = 'lower right', title = "Azimuth Angles")
     plt.xlabel("Freqs. [GHz]")
     plt.ylabel("Realized Gain [dBi]")
@@ -211,6 +211,7 @@ def plot_gain_polar(file_name, n, freqs_oi):
             gains_oi_phi[i_freq_oi] += [f_gain_phi(freq_oi)]
 
     fig, ax = plt.subplots(nrows = 1, ncols = len(freqs_oi), subplot_kw = {'projection': 'polar'}, figsize = (3 * len(freqs_oi), 3))
+    fig.suptitle("HPol In-Ice Realized Gain, Azimuth Beam Pattern at Boresight / $90^\circ$ Zenith", fontsize=14)
 
     for irow, row in enumerate(ax):
         row.set_title(str(np.round(freqs_oi[irow] * 1000.0, 0))+" MHz")
@@ -219,8 +220,34 @@ def plot_gain_polar(file_name, n, freqs_oi):
         row.plot(np.deg2rad(azimuth_angles) + 2.0 * np.pi / 2.0, 10.0 * np.log10(gains_oi_phi[irow]), color = "purple")
         row.plot(np.deg2rad(azimuth_angles) + 3.0 * np.pi / 2.0, 10.0 * np.log10(np.flip(gains_oi_phi[irow])), color = "purple")
         row.set_rmax(5.0)
-        row.set_rmin(-5.0)
- 
+        row.set_rmin(-5.0)        
+        row.set_xticklabels(['', '$45^\circ$', '', '$135^\circ$', '', '$225^\circ$', '', '$315^\circ$'])
+
+def plot_vswr(component_name, base_name):
+
+    # Load up the data that has to do with the feed    
+    data = np.genfromtxt(base_name+"/"+component_name+"-S-ParametersImag.csv", dtype = "float", delimiter = ",", skip_header = 1)
+    s11_freqs = np.array(data[:,0])
+    s11_i = np.array(data[:,1])
+    
+    data = np.genfromtxt(base_name+"/"+component_name+"-S-ParametersReal.csv", dtype = "float", delimiter = ",", skip_header = 1)
+    s11_freqs = np.array(data[:,0])
+    s11_r = np.array(data[:,1])
+
+    s11 = s11_r + 1j * s11_i
+
+    plt.figure()
+    plt.plot(1000.0 * s11_freqs, (1.0 + np.abs(s11)) / (1.0 - np.abs(s11)), color="purple")
+    plt.title("In-Ice VSWR of one of two Horizontal VPols")
+    plt.xlim(0.1, 1000.0)
+    plt.ylim(1.0, 10.0)
+    plt.minorticks_on()
+    plt.grid(which="major")
+    plt.grid(which="minor", alpha=0.25)
+    plt.xlabel("Freq. [MHz]")
+    plt.ylabel("VSWR")
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Run NuRadioMC simulation")
     parser.add_argument("--n", type=float,
@@ -255,6 +282,8 @@ if __name__ == "__main__":
 
     plot_gain(args.outputfilename+".npz", args.n)
     plt.savefig("hpol_realized_gain.png")
+
+    plot_vswr(args.componentname, args.basename1)
 
     plot_gain_polar(args.outputfilename+".npz", args.n, np.linspace(0.2, 0.5, 5))
 
