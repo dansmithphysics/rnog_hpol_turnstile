@@ -170,6 +170,33 @@ def plot_gain(file_name, n):
     plt.xlim(0.0, 1.00)
     plt.grid()
 
+def plot_effective_height(file_name, n):
+    c = scipy.constants.c / 1e9
+    ZL = 50.0 # Impedance of coax / feed
+    Z0 = 120.0 * np.pi # Impedance of free space
+
+    data = np.load(file_name)
+
+    ts = data["ts"]
+    h_the = data["h_the"]
+    h_phi = data["h_phi"]
+
+    freqs = np.fft.rfftfreq(len(h_phi[0]), ts[1] - ts[0])
+
+    plt.figure()
+    for i_azimuth_angle, azimuth_angle in enumerate(np.arange(0, 100, 10)):
+
+        plt.plot(ts, np.fft.fftshift(h_the[i_azimuth_angle]), color = "purple", alpha = (azimuth_angle + 10.0) / 100.0, label = azimuth_angle)
+        plt.plot(ts, np.fft.fftshift(h_phi[i_azimuth_angle]), color = "blue", alpha = (azimuth_angle + 10.0) / 100.0)
+
+    plt.title("In-Ice Realized Effective Height at Boresight / $90^\circ$ Zenith of HPol Prototype: \n Two Fat Dipoles on Sides, Displaced by 25 cm and by $90^\circ$")
+    plt.legend(loc = 'lower right', title = "Azimuth Angles")
+    plt.xlabel("Freqs. [GHz]")
+    plt.ylabel("Effective Height [m]")
+    plt.ylim(-0.02, 0.02)
+    plt.xlim(60.0, 75.0)
+    plt.grid()
+
 def plot_gain_polar(file_name, n, freqs_oi):
     c = scipy.constants.c / 1e9
     ZL = 50.0 # Impedance of coax / feed
@@ -286,5 +313,7 @@ if __name__ == "__main__":
     plot_vswr(args.componentname, args.basename1)
 
     plot_gain_polar(args.outputfilename+".npz", args.n, np.linspace(0.2, 0.5, 5))
+
+    plot_effective_height(args.outputfilename+".npz", args.n)
 
     plt.show()
