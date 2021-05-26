@@ -6,6 +6,9 @@ from scipy.spatial.transform import Rotation as R
 import processing_functions as pf
 import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+from matplotlib.ticker import MaxNLocator
 
 def main(r, n, component_name, base_names, output_file_name, phase_shift, time_delay):
     c = scipy.constants.c / 1e9
@@ -15,6 +18,7 @@ def main(r, n, component_name, base_names, output_file_name, phase_shift, time_d
     # Load up the data that has to do with the feed
     data = np.genfromtxt(base_names[0]+"/"+component_name+"-Voltage (V).csv", dtype = "float", delimiter = ",", skip_header = 1)
     ts = np.array(data[:,0])
+    ts -= ts[0]
     V_measured  = np.array(data[:,1])
     V_measured_func = scipy.interpolate.interp1d(ts, V_measured, kind = "cubic", bounds_error = False, fill_value = "extrapolate")
     
@@ -34,10 +38,11 @@ def main(r, n, component_name, base_names, output_file_name, phase_shift, time_d
     azimuth_angles = np.sort(np.unique(np.array([file_name.split("_")[-1].split("-")[0] for file_name in file_names]).astype("float")))
 
     ts, efield = pf.get_efield(file_names[0])
+    ts -= ts[0]
     nsamples = len(ts)
 
-    effective_height_results_the = np.zeros((len(zenith_angles), len(azimuth_angles), nsamples))
-    effective_height_results_phi = np.zeros((len(zenith_angles), len(azimuth_angles), nsamples))
+    effective_height_results_the = np.zeros((len(azimuth_angles), len(zenith_angles), nsamples))
+    effective_height_results_phi = np.zeros((len(azimuth_angles), len(zenith_angles), nsamples))
     
     # Scan over azimuth angles
     for i_azimuth_angle, azimuth_angle in enumerate(azimuth_angles):
@@ -55,6 +60,9 @@ def main(r, n, component_name, base_names, output_file_name, phase_shift, time_d
             ts_run2, efield_y_run2 = pf.get_efield(file_name_run2.replace("X", "Y"))
             ts_run2, efield_z_run2 = pf.get_efield(file_name_run2.replace("X", "Z"))
             
+            ts_run1 -= ts_run1[0]
+            ts_run2 -= ts_run2[0]
+
             # Phase shift the second antenna before combining
             efield_x_run2 = pf.phase_shift(efield_x_run2, phase_shift)
             efield_y_run2 = pf.phase_shift(efield_y_run2, phase_shift)
@@ -150,7 +158,7 @@ def plot_gain(file_name, n):
 
     plt.figure()
     for i_azimuth_angle, azimuth_angle in enumerate(np.arange(0, 100, 10)):
-        for i_zenith_angle, zenith_angle in enumerate(np.arange(0, 100, 10)):
+        for i_zenith_angle, zenith_angle in enumerate(np.arange(0, 190, 10)):
 
             if(azimuth_angle != 40):
                 continue
@@ -230,7 +238,7 @@ def plot_gain_polar(file_name, n, freqs_oi):
 
     azimuth_angles = np.arange(0, 100, 10)
     for i_azimuth_angle, azimuth_angle in enumerate(np.arange(0, 100, 10)):
-        for i_zenith_angle, zenith_angle in enumerate(np.arange(0, 100, 10)):
+        for i_zenith_angle, zenith_angle in enumerate(np.arange(0, 190, 10)):
 
             if(azimuth_angle != 0):
                 continue
@@ -267,6 +275,116 @@ def plot_gain_polar(file_name, n, freqs_oi):
         row.set_rmin(-5.0)        
         row.set_xticklabels(['', '$45^\circ$', '', '$135^\circ$', '', '$225^\circ$', '', '$315^\circ$'])
 
+def plot_gain_polar_3d(file_name, n, freqs_oi):
+    c = scipy.constants.c / 1e9
+    ZL = 50.0 # Impedance of coax / feed
+    Z0 = 120.0 * np.pi # Impedance of free space
+
+    data = np.load(file_name)
+
+    ts = data["ts"]
+    h_the = data["h_the"]
+    h_phi = data["h_phi"]
+    nsamples = len(ts)
+    fs = ts[1] - ts[0]
+
+    freqs = np.fft.rfftfreq(len(h_phi[0][0]), fs)
+
+    # Plot per freqs_oi
+    gains_oi = [[] for i in range(len(freqs_oi))]
+    gains_oi_the = [[] for i in range(len(freqs_oi))]
+    gains_oi_phi = [[] for i in range(len(freqs_oi))]
+    the = [[] for i in range(len(freqs_oi))]
+    phi = [[] for i in range(len(freqs_oi))]
+
+    azimuth_angles = np.arange(0, 100, 10)
+    for i_azimuth_angle, azimuth_angle in enumerate(np.arange(0, 100, 10)):
+        for i_zenith_angle, zenith_angle in enumerate(np.arange(0, 190, 10)):
+
+            h_fft_the = np.fft.rfft(h_the[i_azimuth_angle][i_zenith_angle], nsamples)
+            h_fft_phi = np.fft.rfft(h_phi[i_azimuth_angle][i_zenith_angle], nsamples)
+        
+            # Convert to gains
+            gain = 4.0 * np.pi * np.power(freqs * np.sqrt(np.square(np.abs(h_fft_the)) + np.square(np.abs(h_fft_phi))) * n / c, 2.0) * Z0 / ZL / n
+            gain_the = 4.0 * np.pi * np.power(freqs * np.abs(h_fft_the) * n / c, 2.0) * Z0 / ZL / n 
+            gain_phi = 4.0 * np.pi * np.power(freqs * np.abs(h_fft_phi) * n / c, 2.0) * Z0 / ZL / n
+            
+            # Get rid of log of zero issues
+            gain[0] = 1e-20
+            gain_the[0] = 1e-20
+            gain_phi[0] = 1e-20
+            
+            f_gain = scipy.interpolate.interp1d(freqs, gain, kind = "cubic", bounds_error = False, fill_value = "extrapolate")
+            f_gain_the = scipy.interpolate.interp1d(freqs, gain_the, kind = "cubic", bounds_error = False, fill_value = "extrapolate")
+            f_gain_phi = scipy.interpolate.interp1d(freqs, gain_phi, kind = "cubic", bounds_error = False, fill_value = "extrapolate")
+
+            for i_freq_oi, freq_oi in enumerate(freqs_oi):
+                gains_oi[i_freq_oi] += [10.0 * np.log10(f_gain(freq_oi))]
+                gains_oi_the[i_freq_oi] += [10.0 * np.log10(f_gain_the(freq_oi))]
+                gains_oi_phi[i_freq_oi] += [10.0 * np.log10(f_gain_phi(freq_oi))]
+                the[i_freq_oi] += [azimuth_angle]
+                phi[i_freq_oi] += [zenith_angle]
+
+    phi = np.deg2rad(phi)
+    the = np.deg2rad(the)
+
+    gains_oi[0] = [gain_ if gain_ > 0 else 0.0 for gain_ in gains_oi[0]] # for plotting reasons
+
+    Xs = gains_oi[0] * np.sin(phi[0]) * np.cos(the[0])
+    Ys = gains_oi[0] * np.sin(phi[0]) * np.sin(the[0])
+    Zs = gains_oi[0] * np.cos(phi[0])
+
+    phis, thetas = np.mgrid[0.0:180.0:10j, 0.0:90.0:10j]
+    phi = np.rad2deg(phi)
+    the = np.rad2deg(the)
+
+    x = np.zeros(phis.shape)
+    y = np.zeros(phis.shape)
+    z = np.zeros(phis.shape)
+
+    for i in range(len(phis)):
+        for j in range(len(phis[i])):
+            phi_ = phis[i][j]
+            theta_ = thetas[i][j]
+
+            # now, need to find the index of the gain
+            index_oi = -1
+            for iii in range(len(phi[0])):
+                if(np.round(phi[0][iii]) == np.round(phi_) and np.round(the[0][iii]) == np.round(theta_)):
+                    index_oi = iii
+                    break
+
+            if(index_oi == -1):
+                print("Didn't find, exiting")
+                print(phi_, theta_)
+                exit()
+
+            x[i][j] = Xs[index_oi]
+            y[i][j] = Ys[index_oi]
+            z[i][j] = Zs[index_oi]
+        
+    fig = plt.figure()
+    ax = Axes3D(fig)
+    ax.scatter(x, y, z)
+
+    r = np.sqrt(np.square(x) + np.square(y) + np.square(z))
+    my_col = cm.jet(r / np.max(r))
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection = '3d')
+    surf = ax.plot_surface(x, y, z,   rstride = 1, cstride = 1, cmap = cm.jet, facecolors = my_col, alpha = 1.0, linewidth = 0)
+    ax.plot_surface(-x, y, z,  rstride = 1, cstride = 1, cmap = cm.jet, facecolors = my_col, alpha = 1.0, linewidth = 0)
+    ax.plot_surface(x, -y, z,  rstride = 1, cstride = 1, cmap = cm.jet, facecolors = my_col, alpha = 1.0, linewidth = 0)
+    ax.plot_surface(-x, -y, z, rstride = 1, cstride = 1, cmap = cm.jet, facecolors = my_col, alpha = 1.0, linewidth = 0)
+    ax.set_xlim(-5., 5.)
+    ax.set_ylim(-5., 5.)
+    ax.set_zlim(-5., 5.)
+    ax.set_aspect('equal')
+
+    m = cm.ScalarMappable(cmap=cm.jet)
+    m.set_array(r)
+    fig.colorbar(m)
+
 def plot_vswr(component_name, base_name):
 
     # Load up the data that has to do with the feed    
@@ -286,52 +404,54 @@ def plot_vswr(component_name, base_name):
     plt.xlim(0.1, 1000.0)
     plt.ylim(1.0, 10.0)
     plt.minorticks_on()
-    plt.grid(which="major")
-    plt.grid(which="minor", alpha=0.25)
+    plt.grid(which = "major")
+    plt.grid(which = "minor", alpha = 0.25)
     plt.xlabel("Freq. [MHz]")
     plt.ylabel("VSWR")
 
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="Run NuRadioMC simulation")
-    parser.add_argument("--n", type=float,
-                        help="Index of refraction of simulation",
-                        default=1.74)
-    parser.add_argument("--r", type=float,
-                        help="Distance from antenna to near field sensors",
-                        default=2.6)
-    parser.add_argument("--componentname", type=str,
-                        help="name of component file", 
-                        default="Component")
-    parser.add_argument("--basename1", type=str,
-                        help="names of location of xfs two output directories", 
-                        default="rnog_hpol_turnstile_model.xf/hpol_component_output")
-    parser.add_argument("--basename2", type=str,
-                        help="names of location of xfs two output directories", 
-                        default="rnog_hpol_turnstile_model.xf/hpol_component1_output")
-    parser.add_argument("--outputfilename", type=str,
-                        help="name of effective height output",
-                        default="hpol_processed_effective_height")
+    parser = argparse.ArgumentParser(description = "Run NuRadioMC simulation")
+    parser.add_argument("--n", type = float,
+                        help = "Index of refraction of simulation",
+                        default = 1.75)
+    parser.add_argument("--r", type = float,
+                        help = "Distance from antenna to near field sensors",
+                        default = 6.5)
+    parser.add_argument("--componentname", type = str,
+                        help = "name of component file", 
+                        default = "Component")
+    parser.add_argument("--basename1", type = str,
+                        help = "names of location of xfs two output directories", 
+                        default = "rnog_hpol_turnstile_model.xf/hpol_component_output")
+    parser.add_argument("--basename2", type = str,
+                        help = "names of location of xfs two output directories", 
+                        default = "rnog_hpol_turnstile_model.xf/hpol_component1_output")
+    parser.add_argument("--outputfilename", type = str,
+                        help = "name of effective height output",
+                        default = "hpol_processed_effective_height")
     args = parser.parse_args()
     return args
 
 if __name__ == "__main__":
     args = parse_arguments()
+
     main(r = args.r, 
          n = args.n,
          component_name = args.componentname,
          base_names = [args.basename1, args.basename2],
          output_file_name = args.outputfilename,
-         phase_shift = 0.0, #np.pi / 2.0,
+         phase_shift = 0.0,
          time_delay = 0.0
     )
 
-    plot_gain(args.outputfilename+".npz", args.n)
+    #plot_gain(args.outputfilename+".npz", args.n)
     #plt.savefig("hpol_realized_gain.png")
 
     #plot_vswr(args.componentname, args.basename1)
 
-    plot_gain_polar(args.outputfilename+".npz", args.n, np.linspace(0.2, 0.5, 5))
+    #plot_gain_polar(args.outputfilename+".npz", args.n, np.linspace(0.2, 0.5, 5))
+    plot_gain_polar_3d(args.outputfilename+".npz", args.n, np.linspace(0.2, 0.5, 5))
 
     #plot_effective_height(args.outputfilename+".npz", args.n)
 
