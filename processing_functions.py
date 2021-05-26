@@ -21,12 +21,13 @@ def butter_bandpass_filter(data, lowcut, highcut, fs, order=2):
     return y
 
 def phase_shift(efield, phase):
-    efield_fft = np.fft.rfft(efield)
+    nsamples = len(efield)
+    efield_fft = np.fft.rfft(efield, nsamples)
     efield_fft_mag = np.abs(efield_fft)
     efield_fft_ang = np.unwrap(np.angle(efield_fft))
     efield_fft_ang += phase
     efield_fft = efield_fft_mag * (np.cos(efield_fft_ang) + 1j * np.sin(efield_fft_ang))
-    efield = np.fft.irfft(efield_fft)
+    efield = np.fft.irfft(efield_fft, nsamples)
     return efield
 
 def time_delay(ts, efield, delay):
